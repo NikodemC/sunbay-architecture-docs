@@ -156,8 +156,11 @@
       MediatR CQRS) na bazie MSSQL, z Azure Functions (timery, konsumenci Service Bus, Durable) i Azure Service Bus
       jako asynchronicznym kręgosłupem. Integruje się z zewnętrznymi softami księgowymi. <strong>Google Sheets jest
       centralnym hubem danych</strong> między softami księgowymi a procesami Sunbay.</p>
+      <p style="color:var(--text-dim);font-size:14px;">OCR (Gemini / Vertex AI) to <strong>osobny</strong> pipeline ekstrakcji
+      dokumentów (upload pliku → ekstrakcja → callback) — nie dotyka ścieżki Google Sheets, dlatego nie ma go na
+      powyższym diagramie ani w dalszej części dokumentu.</p>
       <div class="diagram">
-        <div class="cap">Kontekst systemu — gdzie siedzi arkusz</div>
+        <div class="cap">Kontekst systemu — przepływ danych (strzałka ciągła = ruch danych, przerywana = wyzwolenie/trigger)</div>
         <pre class="mermaid">
 flowchart TB
   SPA["React SPA (konfiguracja flow: IntegrationUrl)"]
@@ -168,18 +171,16 @@ flowchart TB
   SB{{"Azure Service Bus"}}
   ACC["Softy księgowe: Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho"]
   COMM["E-mail / SMS"]
-  OCR["OCR (Gemini / Vertex AI)"]
 
-  SPA --> API
+  SPA -->|"konfiguracja flow"| API
   API --> DB
-  GS -->|"Apps Script wola */sheets-export"| API
-  API -->|"pull faktur i kontaktow"| ACC
+  GS -.->|"Apps Script wyzwala */sheets-export"| API
+  ACC -->|"faktury i kontakty"| API
   API -->|"zapis wierszy do arkusza"| GS
-  FUN -->|"odczyt arkusza jako CSV"| GS
-  FUN --> DB
+  GS -->|"odczyt arkusza (CSV)"| FUN
+  FUN -->|"import do bazy"| DB
   FUN --> SB
   SB --> COMM
-  API -.-> OCR
 
   class GS hub;
   classDef hub fill:#143b33,stroke:#7ee0c0,color:#eafff7,stroke-width:2px;

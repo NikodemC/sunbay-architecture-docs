@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunbay — jak Google Sheets są wpięte w architekturę</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --bg-2: #161b22;
+      --bg-3: #1c2330;
+      --border: #2b3340;
+      --text: #d7dee8;
+      --text-dim: #9aa7b6;
+      --accent: #5ab0f0;
+      --accent-2: #7ee0c0;
+      --warn: #f0c674;
+      --todo: #f08fb0;
+      --code-bg: #11161d;
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      font-size: 16px;
+    }
+    .layout { display: flex; align-items: flex-start; max-width: 1280px; margin: 0 auto; }
+    /* TOC */
+    aside {
+      position: sticky; top: 0; align-self: flex-start;
+      width: 280px; min-width: 280px; height: 100vh; overflow-y: auto;
+      padding: 28px 18px; border-right: 1px solid var(--border);
+      background: var(--bg-2);
+    }
+    aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin: 0 0 12px; }
+    aside ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+    aside li { margin: 2px 0; }
+    aside a {
+      display: block; padding: 6px 10px; border-radius: 6px;
+      color: var(--text-dim); text-decoration: none; font-size: 14px;
+    }
+    aside a:hover { background: var(--bg-3); color: var(--text); }
+    /* Main */
+    main { flex: 1; min-width: 0; padding: 36px 48px 120px; }
+    header.page { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 8px; }
+    header.page h1 { font-size: 30px; margin: 0 0 8px; line-height: 1.25; }
+    header.page .sub { color: var(--text-dim); font-size: 16px; }
+    .meta { margin-top: 14px; font-size: 13px; color: var(--text-dim); }
+    .meta code { color: var(--accent-2); }
+    section { margin-top: 44px; scroll-margin-top: 16px; }
+    section > h2 {
+      font-size: 23px; margin: 0 0 14px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    section h3 { font-size: 18px; margin: 26px 0 10px; color: var(--accent); }
+    p { margin: 12px 0; }
+    a { color: var(--accent); }
+    code {
+      font-family: var(--mono); font-size: .88em;
+      background: var(--code-bg); padding: 1px 6px; border-radius: 4px;
+      border: 1px solid var(--border); color: var(--accent-2);
+      word-break: break-word;
+    }
+    pre.code {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px;
+      color: var(--text);
+    }
+    pre.code code { background: none; border: none; padding: 0; color: inherit; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 5px 0; }
+    /* tables */
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
+    th { background: var(--bg-3); color: var(--text); font-weight: 600; }
+    tr:nth-child(even) td { background: var(--bg-2); }
+    td code { font-size: .85em; }
+    .req { color: var(--accent-2); font-weight: 600; }
+    .opt { color: var(--text-dim); }
+    /* callouts */
+    .callout { border-radius: 8px; padding: 14px 18px; margin: 18px 0; border-left: 4px solid var(--accent); background: var(--bg-2); }
+    .callout.key { border-left-color: var(--accent-2); }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout.todo { border-left-color: var(--todo); background: #251820; }
+    .callout .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+    .callout.key .tag { background: var(--accent-2); color: #08231c; }
+    .callout.warn .tag { background: var(--warn); color: #3a2c08; }
+    .callout.todo .tag { background: var(--todo); color: #3a0c1e; }
+    .callout p:first-of-type { margin-top: 0; }
+    .callout p:last-child { margin-bottom: 0; }
+    /* mermaid */
+    .diagram { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin: 20px 0; overflow-x: auto; }
+    .diagram .cap { font-size: 13px; color: var(--text-dim); margin-bottom: 10px; }
+    pre.mermaid { margin: 0; text-align: center; }
+    .phase { display: inline-block; font-family: var(--mono); font-weight: 700; color: var(--accent-2); }
+    footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13px; }
+    @media (max-width: 900px) {
+      aside { display: none; }
+      main { padding: 24px 18px 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h2>Spis treści</h2>
+    <ol>
+      <li><a href="#tldr">TL;DR dla data engineera</a></li>
+      <li><a href="#arch">1. Architektura w pigułce</a></li>
+      <li><a href="#lifecycle">2. Cykl życia arkusza</a></li>
+      <li><a href="#customfields">3. Most: CustomFields</a></li>
+      <li><a href="#auth">4. Uwierzytelnienie do Google</a></li>
+      <li><a href="#contracts">5. Kontrakty danych</a></li>
+      <li><a href="#touchpoints">6. Mapa punktów styku w kodzie</a></li>
+      <li><a href="#migration">7. Granice migracji</a></li>
+      <li><a href="#legacy">8. Legacy</a></li>
+    </ol>
+  </aside>
+
+  <main>
+    <header class="page">
+      <h1>Sunbay — jak Google Sheets są wpięte w architekturę</h1>
+      <div class="sub">Dokumentacja dla data engineera wspierającego wyjście z Google Sheets.</div>
+      <div class="meta">
+        Stan na <code>2026-05-29</code> · źródło: kod repozytoriów <code>Sunbay</code> (backend .NET 10) i <code>Sunbay-frontend</code> (React) ·
+        zakres: <strong>żywa ścieżka produkcyjna</strong>, arkusze w centrum.
+      </div>
+    </header>
+
+    <section id="tldr">
+      <div class="callout key">
+        <span class="tag">TL;DR</span>
+        <p><strong>Arkusz Google to nie „głupie wejście" — to warstwa ETL/wzbogacania w środku przepływu.</strong>
+        Każdy proces (<code>InvoicingFlow</code>, <code>RecurringCollectionFlow</code>, <code>CollectionFlow</code>)
+        jest zasilany <strong>wyłącznie z Google Sheets — bez wyjątku</strong>.</p>
+        <p>Pełny cykl życia arkusza:</p>
+        <ul>
+          <li><span class="phase">A · Zasilanie</span> — Sunbay <em>sam</em> ciągnie faktury/kontakty z softów księgowych (Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho) i <strong>zapisuje je do arkusza</strong>. Wyzwala to Apps Script w arkuszu wołając endpointy <code>*/sheets-export</code>.</li>
+          <li><span class="phase">B · Transformacja</span> — <strong>w samym arkuszu</strong> (poza kodem): formuły, joiny z innymi źródłami (np. adresy e-mail), wyliczane pola pochodne.</li>
+          <li><span class="phase">C · Import</span> — timer (co minutę) czyta arkusz przez Sheets API i importuje wiersze do bazy.</li>
+          <li><span class="phase">D · Downstream</span> — dalej: windykacja (e-mail/SMS) albo generowanie faktur w systemie docelowym.</li>
+        </ul>
+        <p><strong>Most na dowolne pola policzone w arkuszu:</strong> kolumny spoza modelu C# trafiają automatycznie do <code>CustomFields</code> i przepływają do importu bez zmian w kodzie.</p>
+        <p><strong>Co realnie trzeba odtworzyć przy migracji:</strong> nie pojedynczy „import", lecz cały łańcuch <em>pull → enrich → compute</em>, który dziś jest rozmazany między kodem API a formułami żyjącymi w arkuszach.</p>
+      </div>
+    </section>
+
+    <section id="arch">
+      <h2>1. Architektura w pigułce</h2>
+      <p>Sunbay to platforma automatyzacji fakturowania i windykacji: React SPA + .NET API (Clean Architecture,
+      MediatR CQRS) na bazie MSSQL, z Azure Functions (timery, konsumenci Service Bus, Durable) i Azure Service Bus
+      jako asynchronicznym kręgosłupem. Integruje się z zewnętrznymi softami księgowymi. <strong>Google Sheets jest
+      centralnym hubem danych</strong> między softami księgowymi a procesami Sunbay.</p>
+      <div class="diagram">
+        <div class="cap">Kontekst systemu — gdzie siedzi arkusz</div>
+        <pre class="mermaid">
+flowchart TB
+  SPA["React SPA (konfiguracja flow: IntegrationUrl)"]
+  GS["Google Sheets — arkusz klienta plus Apps Script"]
+  API["Backend .NET API (MediatR CQRS)"]
+  DB[("MSSQL")]
+  FUN["Azure Functions — timery / konsumenci Service Bus / Durable"]
+  SB{{"Azure Service Bus"}}
+  ACC["Softy księgowe: Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho"]
+  COMM["E-mail / SMS"]
+  OCR["OCR (Gemini / Vertex AI)"]
+
+  SPA --> API
+  API --> DB
+  GS -->|"Apps Script wola */sheets-export"| API
+  API -->|"pull faktur i kontaktow"| ACC
+  API -->|"zapis wierszy do arkusza"| GS
+  FUN -->|"odczyt arkusza jako CSV"| GS
+  FUN --> DB
+  FUN --> SB
+  SB --> COMM
+  API -.-> OCR
+
+  class GS hub;
+  classDef hub fill:#143b33,stroke:#7ee0c0,color:#eafff7,stroke-width:2px;
+        </pre>
+      </div>
+    </section>
+
+    <section id="lifecycle">
+      <h2>2. Cykl życia arkusza (rdzeń)</h2>
+      <p>To jest sedno dokumentu. Arkusz przechodzi przez cztery fazy: zasilenie danymi z softu księgowego,
+      transformację w arkuszu, import do bazy i przepływ dalej.</p>
+
+      <div class="diagram">
+        <div class="cap">Cztery fazy życia arkusza: A → B → C → D</div>
+        <pre class="mermaid">
+flowchart TB
+  subgraph A["A - ZASILANIE (soft ksiegowy do arkusza)"]
+    direction TB
+    A1["Apps Script w arkuszu wola */sheets-export"]
+    A2["Handler *ForSheets / *AndAddToSheet: pull z softu, map na DTO"]
+    A3["zapis do arkusza: OverrideRecordsInSheetByUrlAsync"]
+    A1 --> A2 --> A3
+  end
+  subgraph B["B - TRANSFORMACJA W ARKUSZU (POZA kodem)"]
+    direction TB
+    B1["formuly, joiny z innymi zrodlami (maile), wyliczane pola pochodne"]
+  end
+  subgraph C["C - IMPORT (arkusz do flow do DB)"]
+    direction TB
+    C1["Timer co minute: flow 'due' wg NextRunUtc"]
+    C2["DownloadDataFromPrivateGoogleSheetsAsync (Sheets API do CSV)"]
+    C3["ParseWithCustomFieldsAsync: kolumny spoza modelu do CustomFields"]
+    C4["map i import do bazy"]
+    C1 --> C2 --> C3 --> C4
+  end
+  subgraph D["D - DOWNSTREAM"]
+    direction TB
+    D1["Recurring: Service Bus do e-mail/SMS"]
+    D2["Invoicing: drafty do Durable do system docelowy"]
+  end
+  A3 --> B1
+  B1 --> C1
+  C4 --> D1
+  C4 --> D2
+
+  class B1 nocode;
+  classDef nocode fill:#3a2c08,stroke:#f0c674,color:#fff6e0,stroke-width:2px;
+        </pre>
+      </div>
+
+      <div class="diagram">
+        <div class="cap">Ta sama historia jako sekwencja w czasie</div>
+        <pre class="mermaid">
+sequenceDiagram
+  participant AS as Apps Script (arkusz)
+  participant API as Backend API
+  participant ACC as Soft ksiegowy
+  participant GS as Google Sheet
+  participant TMR as Azure Function (timer)
+  participant DB as MSSQL
+  AS->>API: POST */sheets-export
+  API->>ACC: pull faktur
+  ACC-->>API: faktury
+  API->>GS: zapis wierszy (OverrideRecords...)
+  Note over GS: czlowiek wzbogaca: formuly, joiny, pola -> CustomFields
+  TMR->>API: tick co minute (flow due?)
+  API->>GS: odczyt CSV (Sheets API)
+  GS-->>API: wiersze CSV
+  API->>DB: parse + import (z CustomFields)
+        </pre>
+      </div>
+
+      <h3>2a. Faza A — Zasilanie (soft księgowy → arkusz)</h3>
+      <p>Apps Script w arkuszu woła endpointy <code>*/sheets-export</code> na kontrolerach integracji. Handler
+      (<code>*ForSheetsQueryHandler</code> / <code>*AndAddToSheetCommandHandler</code>) pobiera dane z softu,
+      mapuje na uproszczone DTO i <strong>zapisuje je do arkusza</strong> przez <code>OverrideRecordsInSheetByUrlAsync</code>
+      / <code>AppendRecordsToSheetByUrlAsync</code> (<code>GoogleDriveService.cs</code>). Część wzbogacania jest już
+      w kodzie — np. handler Xero dokleja e-mail i telefon z zagnieżdżonego <code>invoice.Contact</code>.</p>
+      <table>
+        <thead><tr><th>Integracja</th><th>Reprezentatywny endpoint</th><th>Handler</th><th>Co zapisuje do arkusza</th></tr></thead>
+        <tbody>
+          <tr><td>Xero</td><td><code>POST api/Xero/invoices/sales/sheets-export</code></td><td><code>GetAllSalesInvoicesQuery</code></td><td>Faktury sprzedaży + e-mail/telefon kontaktu (<code>SimplifiedXeroInvoiceDto</code>)</td></tr>
+          <tr><td>inFakt</td><td><code>POST api/2.0/inFakt/invoices/sheets-export</code></td><td><code>GetInFaktInvoicesForSheetsQuery</code></td><td>Faktury (sent/printed); też corrective / all / clients</td></tr>
+          <tr><td>wFirma</td><td><code>POST api/2.0/wfirma/invoices/export-to-sheets</code></td><td><code>GetInvoicesByClientIdAndAddToSheet</code></td><td>Faktury; też kontrahenci i faktury opłacone</td></tr>
+          <tr><td>SaldeoSmart</td><td>query handler</td><td><code>GetInvoicesByMonthsQuery</code></td><td>Faktury wg miesiąca; kontrahenci; korekty</td></tr>
+          <tr><td>Systim</td><td>query handler</td><td><code>GetSystimCompaniesQuery</code></td><td>Firmy (sprzedawcy)</td></tr>
+          <tr><td>Zoho</td><td>command</td><td><code>ImportZohoInvoicesToSheetCommand</code></td><td>Wiersze kolejki + arkusz historii (audyt)</td></tr>
+          <tr><td>BrainEmbassy</td><td>command</td><td><code>SyncBrainEmbassyInvoicesToSheetCommand</code></td><td>Faktury</td></tr>
+        </tbody>
+      </table>
+      <p style="color:var(--text-dim);font-size:14px;">Uwaga: nazewnictwo tras bywa różne (<code>sheets-export</code> vs <code>export-to-sheets</code>);
+      wersje v1 są oznaczone <code>[Obsolete]</code>, żywe są endpointy v2 (zwykle pod <code>api/2.0/...</code>, autoryzowane kluczem API).</p>
+
+      <h3>2b. Faza B — Transformacja w arkuszu (poza kodem)</h3>
+      <div class="callout todo">
+        <span class="tag">Do uzupełnienia — Filip (CEO)</span>
+        <p>Ta warstwa <strong>nie istnieje w repozytorium</strong> — żyje w samych arkuszach: łączenie danych
+        z dodatkowych źródeł, wyciąganie informacji i formuły liczące wartości dodatkowych pól (które po imporcie
+        lądują w <code>CustomFields</code>). To jest najważniejsza część do odtworzenia przy migracji.</p>
+        <p>Filip przygotuje konkretne przykłady: jakie źródła i w jaki sposób są mergowane, jakie informacje
+        wyciągane i jakie logiki dodawane. Poniżej szablon do wypełnienia.</p>
+      </div>
+      <table>
+        <thead><tr><th>Arkusz / proces</th><th>Dodatkowe źródło</th><th>Jak łączone (klucz)</th><th>Jakie pola / logika</th><th>Trafia do <code>CustomFields</code>?</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><em>np. windykacja klienta X</em></td>
+            <td><em>np. lista e-maili z innego arkusza</em></td>
+            <td><em>np. po NIP / numerze klienta</em></td>
+            <td><em>np. VLOOKUP e-maila + formuła liczy odsetki</em></td>
+            <td><em>tak / nie</em></td>
+          </tr>
+          <!-- DO UZUPEŁNIENIA przez Filipa: kolejne wiersze z realnymi przypadkami (źródło, klucz merge'a, wyciągane informacje, dodawane logiki/formuły). -->
+        </tbody>
+      </table>
+
+      <h3>2c. Faza C — Import (arkusz → flow → DB)</h3>
+      <p>Azure Function z <code>[TimerTrigger("* * * * *")]</code> (co minutę, z distributed lock) sprawdza, które flow
+      są „due" wg harmonogramu (<code>NextRunUtc</code>, <code>ScheduledSendHour</code>, <code>DaysInterval</code>).
+      Dla każdego flow updater pobiera arkusz przez <code>GoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code>
+      (autoryzowane Sheets API → konwersja na CSV), parsuje, mapuje i importuje do bazy.</p>
+      <ul>
+        <li><strong>Recurring:</strong> <code>AutomatedRecurringCollectionRecurringCollectionFlowUpdater</code> →
+        <code>ParseWithCustomFieldsAsync&lt;RecurringInvoiceCsvModel&gt;</code> → wiersze bez <code>DueDate</code> są
+        pomijane → import. Błąd konwersji CSV → alert mailowy (<code>IAlertEmailService</code>), nie twardy crash.</li>
+        <li><strong>Invoicing:</strong> <code>AutomatedInvoicingFlowUpdater</code> (działa tylko gdy
+        <code>IntegrationType == GoogleSheets</code>) → <code>ParseToAsync&lt;InvoiceSheetRow&gt;</code> →
+        grupowanie po <code>InvoiceGroupId</code> → import draftów faktur.</li>
+      </ul>
+
+      <h3>2d. Faza D — Downstream</h3>
+      <ul>
+        <li><strong>Recurring / Collection:</strong> zaimportowane dane napędzają automatyzację windykacji —
+        komunikaty trafiają na Azure Service Bus (<code>email-queue</code> / <code>sms-queue</code>), skąd konsumenci
+        (Azure Functions) wysyłają e-maile/SMS.</li>
+        <li><strong>Invoicing:</strong> drafty → orchestracja Durable Functions → generowanie faktur w systemie
+        docelowym (Xero / Fakturownia / inFakt).</li>
+      </ul>
+    </section>
+
+    <section id="customfields">
+      <h2>3. Most: CustomFields</h2>
+      <p>To jest mechanizm, dzięki któremu dowolne pola policzone w arkuszu przepływają do Sunbay bez zmian w kodzie —
+      i dlatego arkusze są tak „elastyczne" (a migracja tak podstępna).</p>
+      <p><code>Application/Helpers/CsvParserService.cs</code> → <code>ParseWithCustomFieldsAsync&lt;T&gt;</code>: dla
+      każdego wiersza CsvHelper mapuje znane kolumny na właściwości modelu, a następnie <code>ExtractCustomFields</code>
+      przechodzi po wszystkich nagłówkach CSV. Każdy nagłówek, który <strong>nie pasuje</strong> do żadnej publicznej
+      właściwości modelu (porównanie <strong>po nazwie, case-insensitive</strong>, przez refleksję
+      <code>GetProperty(header, IgnoreCase|Public|Instance)</code>), trafia do słownika
+      <code>Dictionary&lt;string,string&gt; CustomFields</code>.</p>
+      <pre class="code"><code>private static bool IsModelProperty&lt;T&gt;(string header) =&gt;
+    typeof(T).GetProperty(header,
+        BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance) != null;
+// nagłówek bez odpowiednika w modelu  ->  CustomFields[header] = value;</code></pre>
+      <div class="callout warn">
+        <span class="tag">Ważny niuans</span>
+        <p><code>CustomFields</code> obejmuje ścieżkę <strong>recurring/collection</strong>
+        (<code>RecurringInvoiceCsvModel</code>, <code>InvoicesCvsModel</code> — implementują <code>ICustomFields</code>).
+        Ścieżka <strong>invoicing</strong> używa <code>ParseToAsync&lt;InvoiceSheetRow&gt;</code> i
+        <strong>nie</strong> przenosi dowolnych dodatkowych kolumn — liczą się tylko zdefiniowane pola.</p>
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2>4. Uwierzytelnienie do Google</h2>
+      <p>Jedno konto serwisowe Google z domain-wide delegation; per klient stosowana jest impersonacja.
+      Poświadczenia pochodzą z <code>appsettings</code> (klucze pod <code>Google:Credentials</code>; wartości sekretne
+      z Key Vault — <em>nie</em> umieszczamy ich tutaj).</p>
+      <div class="diagram">
+        <div class="cap">Ścieżka uwierzytelnienia do Sheets/Drive API</div>
+        <pre class="mermaid">
+flowchart LR
+  CFG["appsettings -> Google:Credentials (konto serwisowe Sunbay; szczegoly w Key Vault)"]
+  GCF["GoogleClientFactory: GoogleCredential.FromJson()"]
+  IMP["impersonacja per clientId (domain-wide delegation)"]
+  SVC["SheetsService / DriveService (cache per email)"]
+  GAPI["Google Sheets / Drive API"]
+  CFG --> GCF --> IMP --> SVC --> GAPI
+        </pre>
+      </div>
+      <p>Odczyt arkusza ma dwie drogi w <code>GoogleDriveService</code>: publiczną (anonimowy
+      <code>export?format=csv</code>) i prywatną (autoryzowane <code>Spreadsheets.Values.Get</code> + konwersja na CSV
+      przez CsvHelper). <strong>Żywe flow używają drogi prywatnej</strong>
+      (<code>DownloadDataFromPrivateGoogleSheetsAsync</code>).</p>
+    </section>
+
+    <section id="contracts">
+      <h2>5. Kontrakty danych (kształt arkuszy)</h2>
+      <p>Modele, do których parsowany jest CSV pobrany z arkusza. To kontrakt, który arkusz musi spełnić.</p>
+
+      <h3><code>RecurringInvoiceCsvModel</code> — recurring collection</h3>
+      <p style="color:var(--text-dim);font-size:14px;"><code>Sunbay.RecurringCollectionFlow.Automation/Models/RecurringInvoiceCsvModel.cs</code></p>
+      <table>
+        <thead><tr><th>Kolumna</th><th>Typ</th><th>Wymagane</th><th>Uwagi</th></tr></thead>
+        <tbody>
+          <tr><td><code>InvoiceNumber</code></td><td>string</td><td class="req">tak</td><td>Numer faktury</td></tr>
+          <tr><td><code>ExternalInvoiceId</code></td><td>string?</td><td class="opt">nie</td><td>ID w systemie zewnętrznym</td></tr>
+          <tr><td><code>UniqueCustomerId</code></td><td>string?</td><td class="opt">nie</td><td>Identyfikator klienta</td></tr>
+          <tr><td><code>CustomerName</code></td><td>string</td><td class="req">tak</td><td>Nazwa odbiorcy</td></tr>
+          <tr><td><code>CustomerAddress</code></td><td>string?</td><td class="opt">nie</td><td></td></tr>
+          <tr><td><code>Email</code></td><td>string?</td><td class="opt">nie</td><td>Często doklejany w arkuszu (faza B)</td></tr>
+          <tr><td><code>EmailCc</code></td><td>string?</td><td class="opt">nie</td><td></td></tr>
+          <tr><td><code>PhoneNumber</code></td><td>string?</td><td class="opt">nie</td><td></td></tr>
+          <tr><td><code>GroupingFactor</code></td><td>string?</td><td class="opt">nie</td><td>Czynnik grupujący</td></tr>
+          <tr><td><code>IssueDate</code></td><td>DateTime?</td><td class="opt">nie</td><td>Data wystawienia</td></tr>
+          <tr><td><code>DueDate</code></td><td>DateTime?</td><td class="opt">nie</td><td><strong>Wiersze bez DueDate są pomijane przy imporcie</strong></td></tr>
+          <tr><td><code>Amount</code></td><td>decimal</td><td class="req">tak</td><td>Kwota</td></tr>
+          <tr><td><code>Currency</code></td><td>string</td><td class="req">tak</td><td>Waluta</td></tr>
+          <tr><td><code>BankAccount</code></td><td>string</td><td class="req">tak</td><td>Numer konta</td></tr>
+          <tr><td><code>Url</code></td><td>string</td><td class="req">tak</td><td>Link do faktury</td></tr>
+          <tr><td><code>CustomFields</code></td><td>Dictionary</td><td class="opt">auto</td><td><strong>Wszystkie kolumny spoza powyższych</strong> — patrz sekcja 3</td></tr>
+        </tbody>
+      </table>
+
+      <h3><code>InvoiceSheetRow</code> — invoicing flow</h3>
+      <p style="color:var(--text-dim);font-size:14px;"><code>Sunbay.InvoicingFlow/Sheets/InvoiceSheetRow.cs</code> —
+      wiersze grupowane po <code>InvoiceGroupId</code> (1 grupa = 1 faktura z wieloma pozycjami).</p>
+      <table>
+        <thead><tr><th>Grupa pól</th><th>Kolumny</th></tr></thead>
+        <tbody>
+          <tr><td>Grupowanie</td><td><code>InvoiceGroupId</code> (klucz scalający wiersze w fakturę)</td></tr>
+          <tr><td>Poziom faktury</td><td><code>InvoiceNumber</code>, <code>IssueDate</code>, <code>DueDate</code>, <code>PaymentTermsDays</code>, <code>Currency</code>, <code>Notes</code></td></tr>
+          <tr><td>Nabywca (Buyer)</td><td><code>BuyerName</code>, <code>BuyerTaxNumber</code>, <code>BuyerEmail</code>, <code>BuyerCountry</code>, <code>BuyerCity</code>, <code>BuyerStreet</code>, <code>BuyerStreetNumber</code>, <code>BuyerFlatNumber</code>, <code>BuyerPostCode</code></td></tr>
+          <tr><td>Pozycja (Line, powtarzalne)</td><td><code>LineDescription</code>, <code>LineQuantity</code>, <code>LineUnitPriceNet</code>, <code>LineTaxRate</code>, <code>LineDiscountPercent</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>DTO zasilające (faza A)</h3>
+      <p>Każda integracja ma własne uproszczone DTO zapisywane do arkusza (np. <code>SimplifiedXeroInvoiceDto</code>
+      z polami faktury + <code>ContactEmail</code>/<code>ContactPhone</code>). Kolejność kolumn w arkuszu = kolejność
+      właściwości DTO (zapis przez refleksję, od komórki <code>A2</code> — wiersz 1 to nagłówki). Pełne definicje:
+      <code>Application/Dto/SimplifiedModels/</code> oraz handlery w <code>Application/Features/Invoicing/</code>.</p>
+    </section>
+
+    <section id="touchpoints">
+      <h2>6. Mapa punktów styku w kodzie</h2>
+      <p>Nawigacja dla data engineera — gdzie dokładnie kod dotyka arkuszy.</p>
+      <table>
+        <thead><tr><th>Rola</th><th>Plik</th><th>Opis</th></tr></thead>
+        <tbody>
+          <tr><td>Odczyt arkusza (seam migracji)</td><td><code>Application/Services/GoogleDrive/GoogleDriveService.cs</code></td><td><code>DownloadDataFromPrivateGoogleSheetsAsync</code> — czyta arkusz przez Sheets API, zwraca CSV</td></tr>
+          <tr><td>Zapis do arkusza (zasilanie)</td><td><code>Application/Services/GoogleDrive/GoogleDriveService.cs</code></td><td><code>OverrideRecordsInSheetByUrlAsync</code> / <code>AppendRecordsToSheetByUrlAsync</code></td></tr>
+          <tr><td>Auth Google</td><td><code>Application/Services/GoogleDrive/GoogleClientFactory.cs</code></td><td>Service account + impersonacja per klient</td></tr>
+          <tr><td>Parser + CustomFields</td><td><code>Application/Helpers/CsvParserService.cs</code></td><td>Mapowanie CSV; przechwytywanie kolumn spoza modelu</td></tr>
+          <tr><td>Przykład handlera zasilającego</td><td><code>Application/Features/Invoicing/Queries/Xero/GetAllUnpaidSalesInvoices/GetAllSalesInvoicesQueryHandler.cs</code></td><td>Wzorzec pull → map → write do arkusza</td></tr>
+          <tr><td>Model + updater recurring</td><td><code>Sunbay.RecurringCollectionFlow.Automation/</code></td><td><code>Models/RecurringInvoiceCsvModel.cs</code> + <code>Services/AutomatedRecurringCollectionRecurringCollectionFlowUpdater.cs</code></td></tr>
+          <tr><td>Model + updater invoicing</td><td><code>Sunbay.InvoicingFlow* </code></td><td><code>Sheets/InvoiceSheetRow.cs</code> + <code>Automation/Services/AutomatedInvoicingFlowUpdater.cs</code></td></tr>
+          <tr><td>Encje (konfiguracja flow)</td><td><code>Domain/Sunbay/RecurringCollectionFlow.cs</code>, <code>Domain/Sunbay/InvoicingFlow.cs</code></td><td>Pola <code>IntegrationType</code>, <code>IntegrationUrl</code></td></tr>
+          <tr><td>Triggery (harmonogram)</td><td><code>Sunbay.FunctionApp.Async/Functions/.../TimeTrigger/</code></td><td><code>ScheduleInvoicingFlowsTimeTrigger.cs</code>, <code>ScheduleRecurringCollectionFlowsTimeTrigger.cs</code> — <code>* * * * *</code></td></tr>
+          <tr><td>Enum źródła</td><td><code>Domain/Sunbay/Enums/IntegrationType.cs</code></td><td><code>GoogleSheets = 1</code>, <code>CsvUpload = 2</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="migration">
+      <h2>7. Granice migracji / co podmienić</h2>
+      <p><strong>Zależność procesów od arkuszy jest całkowita.</strong> Każdy żywy proces czyta dane z Google Sheets.
+      W kodzie istnieje też <code>IntegrationType.CsvUpload</code>, ale służy on odrębnemu przypadkowi — importowi
+      <strong>odbiorców (klientów naszych klientów)</strong> (frontend <code>src/components/clients/ImportClients/</code>
+      + <code>src/components/csvImporterModal/</code>; backend <code>Sunbay.Invoices/Commands/ImportRecipients/</code>,
+      <code>Queries/ExportRecipientsCsv/</code>; źródło oznaczane <code>InvoiceRecipientSource.Csv</code>). To
+      <strong>nie</strong> jest produkcyjna ścieżka zasilania procesów.</p>
+      <p>Szwy do podmiany przy migracji:</p>
+      <ul>
+        <li><strong>Odczyt:</strong> <code>IGoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code> — jeden punkt, w którym dane wchodzą do importu.</li>
+        <li><strong>Zasilanie:</strong> handlery <code>*ForSheets</code> / <code>*AndAddToSheet</code> — dziś piszą do arkusza; docelowo źródło danych zamiast arkusza.</li>
+        <li><strong>Transformacja:</strong> warstwa formuł/joinów z fazy B — dziś w arkuszu, do przeniesienia do realnego ETL (to największa, „niewidoczna" praca).</li>
+        <li><strong>Model:</strong> <code>IntegrationType</code> — dodanie nowego źródła lub zastąpienie wartości <code>GoogleSheets</code>.</li>
+      </ul>
+      <div class="callout">
+        <span class="tag">Pytania otwarte do ustalenia</span>
+        <ul>
+          <li>Wolumeny: ile wierszy/faktur na arkusz, ile arkuszy/flow/klientów aktywnych?</li>
+          <li>Częstotliwość: jak często flow są „due" i jak często Apps Script odświeża zasilanie?</li>
+          <li>Które integracje księgowe są realnie używane dziś (a które tylko w kodzie)?</li>
+          <li>Jak wiele logiki z fazy B jest unikalne per klient vs. powtarzalne?</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="legacy">
+      <h2>8. Legacy</h2>
+      <p>Dla porządku: w kodzie istnieją też stare endpointy panelu komunikacji/dokumentów
+      (<code>api/2.0/sheets/*</code>, <code>[Obsolete]</code> <code>api/sheets/*</code>) oraz zapis statusów/timestampów
+      z powrotem do arkusza — są <strong>poza zakresem</strong> tej migracji i można je pominąć.</p>
+    </section>
+
+    <footer>
+      Wygenerowano na podstawie kodu repozytoriów Sunbay (stan 2026-05-29). Sekcja 2b („Transformacja w arkuszu")
+      czeka na konkretne przykłady od Filipa (CEO). Diagramy renderowane przez Mermaid.js.
+    </footer>
+  </main>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    securityLevel: 'loose',
+    flowchart: { htmlLabels: true, curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

@@ -461,16 +461,16 @@ flowchart LR
       <ul>
         <li><strong>Odczyt:</strong> <code>IGoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code> — jeden punkt, w którym dane wchodzą do importu.</li>
         <li><strong>Zasilanie:</strong> handlery <code>*ForSheets</code> / <code>*AndAddToSheet</code> — dziś piszą do arkusza; docelowo źródło danych zamiast arkusza.</li>
-        <li><strong>Transformacja:</strong> warstwa formuł i złączeń z fazy B — dziś w arkuszu, do przeniesienia do realnego ETL (to największa, „niewidoczna" praca).</li>
+        <li><strong>Transformacja:</strong> warstwa formuł i złączeń z fazy B — dziś w arkuszu, w praktyce unikalna per klient, do przeniesienia do realnego ETL (to największa, „niewidoczna" praca).</li>
         <li><strong>Model:</strong> <code>IntegrationType</code> — dodanie nowego źródła lub zastąpienie wartości <code>GoogleSheets</code>.</li>
       </ul>
-      <div class="callout">
-        <span class="tag">Pytania otwarte do ustalenia</span>
+      <div class="callout key">
+        <span class="tag">Skala i charakterystyka</span>
         <ul>
-          <li>Wolumeny: ile wierszy/faktur na arkusz, ile arkuszy/procesów/klientów aktywnych?</li>
-          <li>Częstotliwość: jak często procesy się uruchamiają i jak często Apps Script odświeża zasilanie?</li>
-          <li>Które integracje księgowe są realnie używane dziś (a które tylko w kodzie)?</li>
-          <li>Jak wiele logiki z fazy B jest unikalne per klient vs. powtarzalne?</li>
+          <li><strong>Wolumeny:</strong> do ~3 000 faktur na arkusz; ~15 klientów; ~20 arkuszy; ~40 procesów (część klientów ma kilka procesów zasilanych tymi samymi danymi).</li>
+          <li><strong>Częstotliwość:</strong> procesy uruchamiają się raz dziennie albo ręcznie na żądanie z poziomu aplikacji. Apps Script odświeża zasilanie różnie — u części klientów co ~15 minut, u części raz dziennie rano.</li>
+          <li><strong>Integracje księgowe:</strong> w użyciu wszystkie poza <strong>Systim</strong> (Systim istnieje tylko w kodzie).</li>
+          <li><strong>Logika fazy B:</strong> raczej <strong>unikalna per klient</strong> — przeniesienie transformacji to praca per klient, nie jeden wspólny szablon.</li>
         </ul>
       </div>
     </section>

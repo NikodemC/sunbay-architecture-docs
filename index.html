@@ -128,7 +128,7 @@
       <div class="sub">Dokumentacja dla data engineera wspierającego wyjście z Google Sheets.</div>
       <div class="meta">
         Stan na <code>2026-05-29</code> · źródło: kod repozytoriów <code>Sunbay</code> (backend .NET 10) i <code>Sunbay-frontend</code> (React) ·
-        zakres: <strong>żywa ścieżka produkcyjna</strong>, arkusze w centrum.
+        zakres: <strong>aktualnie działająca ścieżka produkcyjna</strong>, arkusze w centrum.
       </div>
     </header>
 
@@ -141,13 +141,13 @@
         wzorca, ale jest obecnie nieużywany (patrz „Zakres na dziś").</p>
         <p>Pełny cykl życia arkusza:</p>
         <ul>
-          <li><span class="phase">A · Zasilanie</span> — Sunbay <em>sam</em> ciągnie faktury/kontakty z softów księgowych (Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho) i <strong>zapisuje je do arkusza</strong>. Wyzwala to Apps Script w arkuszu wołając endpointy <code>*/sheets-export</code>.</li>
-          <li><span class="phase">B · Transformacja</span> — <strong>w samym arkuszu</strong> (poza kodem): formuły, joiny z innymi źródłami (np. adresy e-mail), wyliczane pola pochodne.</li>
-          <li><span class="phase">C · Import</span> — timer tika co minutę <strong>tylko po to, by sprawdzić</strong>, czy któryś proces jest zaplanowany na ten moment; <strong>każdy proces odświeża arkusz i wysyła najwyżej raz dziennie</strong> (o swojej godzinie). Gdy proces jest „due": odczyt arkusza (Sheets API) → import wierszy do bazy.</li>
-          <li><span class="phase">D · Downstream</span> — dalej: windykacja (e-mail/SMS) albo generowanie faktur w systemie docelowym.</li>
+          <li><span class="phase">A · Zasilanie</span> — Sunbay <em>sam</em> ciągnie faktury/kontakty z softów księgowych (Xero, Fakturownia, inFakt, SaldeoSmart, wFirma) i <strong>zapisuje je do arkusza</strong>. Wyzwala to Apps Script w arkuszu wołając endpointy <code>*/sheets-export</code>.</li>
+          <li><span class="phase">B · Transformacja</span> — <strong>w samym arkuszu</strong> (poza kodem): formuły, łączenie z innymi źródłami (np. adresy e-mail), wyliczane pola pochodne.</li>
+          <li><span class="phase">C · Import</span> — timer budzi się co minutę <strong>tylko po to, by sprawdzić</strong>, czy któryś proces jest zaplanowany na ten moment; <strong>każdy proces odświeża arkusz i wysyła najwyżej raz dziennie</strong> (o swojej godzinie). Gdy proces ma zaplanowane uruchomienie: odczyt arkusza (Sheets API) → import wierszy do bazy.</li>
+          <li><span class="phase">D · Dalej</span> — co dalej: windykacja (e-mail/SMS) albo generowanie faktur w systemie docelowym.</li>
         </ul>
         <p><strong>Most na dowolne pola policzone w arkuszu:</strong> kolumny spoza modelu C# trafiają automatycznie do <code>CustomFields</code> i przepływają do importu bez zmian w kodzie.</p>
-        <p><strong>Co realnie trzeba odtworzyć przy migracji:</strong> nie pojedynczy „import", lecz cały łańcuch <em>pull → enrich → compute</em>, który dziś jest rozmazany między kodem API a formułami żyjącymi w arkuszach.</p>
+        <p><strong>Co realnie trzeba odtworzyć przy migracji:</strong> nie pojedynczy „import", lecz cały łańcuch <em>pobranie → wzbogacenie → wyliczenie</em>, który dziś jest rozmazany między kodem API a formułami żyjącymi w arkuszach.</p>
       </div>
       <div class="callout warn">
         <span class="tag">Zakres na dziś</span>
@@ -175,16 +175,16 @@
         <div class="cap">Kontekst systemu — przepływ danych (strzałka ciągła = ruch danych, przerywana = wyzwolenie/trigger)</div>
         <pre class="mermaid">
 flowchart TB
-  SPA["React SPA (konfiguracja flow: IntegrationUrl)"]
+  SPA["React SPA (konfiguracja procesu: IntegrationUrl)"]
   GS["Google Sheets — arkusz klienta plus Apps Script"]
   API["Backend .NET API (MediatR CQRS)"]
   DB[("MSSQL")]
   FUN["Azure Functions — timery / konsumenci Service Bus / Durable"]
   SB{{"Azure Service Bus"}}
-  ACC["Softy księgowe: Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho"]
+  ACC["Softy księgowe: Xero, Fakturownia, inFakt, SaldeoSmart, wFirma"]
   COMM["E-mail / SMS"]
 
-  SPA -->|"konfiguracja flow"| API
+  SPA -->|"konfiguracja procesu"| API
   API --> DB
   GS -.->|"Apps Script wyzwala */sheets-export"| API
   ACC -->|"faktury i kontakty"| API
@@ -202,36 +202,36 @@ flowchart TB
 
     <section id="lifecycle">
       <h2>2. Cykl życia arkusza (rdzeń)</h2>
-      <p>To jest sedno dokumentu. Arkusz przechodzi przez cztery fazy: zasilenie danymi z softu księgowego,
+      <p>To jest sedno dokumentu. Arkusz przechodzi przez cztery fazy: zasilanie danymi z softu księgowego,
       transformację w arkuszu, import do bazy i przepływ dalej.</p>
 
       <div class="diagram">
         <div class="cap">Cztery fazy życia arkusza: A → B → C → D</div>
         <pre class="mermaid">
 flowchart TB
-  subgraph A["A - ZASILANIE (soft ksiegowy do arkusza)"]
+  subgraph A["A — ZASILANIE (soft księgowy → arkusz)"]
     direction TB
-    A1["Apps Script w arkuszu wola */sheets-export"]
-    A2["Handler *ForSheets / *AndAddToSheet: pull z softu, map na DTO"]
+    A1["Apps Script w arkuszu woła */sheets-export"]
+    A2["Handler *ForSheets / *AndAddToSheet: pobiera z softu, mapuje na DTO"]
     A3["zapis do arkusza: OverrideRecordsInSheetByUrlAsync"]
     A1 --> A2 --> A3
   end
-  subgraph B["B - TRANSFORMACJA W ARKUSZU (POZA kodem)"]
+  subgraph B["B — TRANSFORMACJA W ARKUSZU (POZA kodem)"]
     direction TB
-    B1["formuly, joiny z innymi zrodlami (maile), wyliczane pola pochodne"]
+    B1["formuły, łączenie z innymi źródłami (maile), wyliczane pola pochodne"]
   end
-  subgraph C["C - IMPORT (arkusz do flow do DB)"]
+  subgraph C["C — IMPORT (arkusz → proces → baza)"]
     direction TB
-    C1["Timer tika co minute: czy ktorys proces jest due? (proces max raz dziennie)"]
-    C2["DownloadDataFromPrivateGoogleSheetsAsync (Sheets API do CSV)"]
-    C3["ParseWithCustomFieldsAsync: kolumny spoza modelu do CustomFields"]
-    C4["map i import do bazy"]
-    C1 -->|"gdy proces due"| C2 --> C3 --> C4
+    C1["Timer budzi się co minutę: czy któryś proces zaplanowany na teraz? (proces max raz dziennie)"]
+    C2["DownloadDataFromPrivateGoogleSheetsAsync (Sheets API → CSV)"]
+    C3["ParseWithCustomFieldsAsync: kolumny spoza modelu → CustomFields"]
+    C4["mapowanie i import do bazy"]
+    C1 -->|"gdy zaplanowany"| C2 --> C3 --> C4
   end
-  subgraph D["D - DOWNSTREAM"]
+  subgraph D["D — DALEJ"]
     direction TB
-    D1["Collection/Recurring: Service Bus do e-mail/SMS"]
-    D2["Invoicing (dzis nieuzywany): drafty do Durable do system docelowy"]
+    D1["Collection/Recurring: Service Bus → e-mail/SMS"]
+    D2["Invoicing (dziś nieużywany): wersje robocze → Durable → system docelowy"]
   end
   A3 --> B1
   B1 --> C1
@@ -249,20 +249,20 @@ flowchart TB
 sequenceDiagram
   participant AS as Apps Script (arkusz)
   participant API as Backend API
-  participant ACC as Soft ksiegowy
+  participant ACC as Soft księgowy
   participant GS as Google Sheet
   participant TMR as Azure Function (timer)
   participant DB as MSSQL
   AS->>API: POST */sheets-export
-  API->>ACC: pull faktur
+  API->>ACC: pobierz faktury
   ACC-->>API: faktury
   API->>GS: zapis wierszy (OverrideRecords...)
-  Note over GS: czlowiek wzbogaca: formuly, joiny, pola -> CustomFields
-  TMR->>API: tick co minute - ktorys proces due dzis?
-  Note over TMR,API: kazdy proces max raz dziennie (o swojej godzinie)
+  Note over GS: człowiek wzbogaca: formuły, łączenie, pola → CustomFields
+  TMR->>API: budzi się co minutę — czy któryś proces zaplanowany na dziś?
+  Note over TMR,API: każdy proces max raz dziennie (o swojej godzinie)
   API->>GS: odczyt CSV (Sheets API)
   GS-->>API: wiersze CSV
-  API->>DB: parse + import (z CustomFields)
+  API->>DB: parsowanie + import (z CustomFields)
         </pre>
       </div>
 
@@ -277,15 +277,14 @@ sequenceDiagram
         <tbody>
           <tr><td>Xero</td><td><code>POST api/Xero/invoices/sales/sheets-export</code></td><td><code>GetAllSalesInvoicesQuery</code></td><td>Faktury sprzedaży + e-mail/telefon kontaktu (<code>SimplifiedXeroInvoiceDto</code>)</td></tr>
           <tr><td>inFakt</td><td><code>POST api/2.0/inFakt/invoices/sheets-export</code></td><td><code>GetInFaktInvoicesForSheetsQuery</code></td><td>Faktury (sent/printed); też corrective / all / clients</td></tr>
+          <tr><td>Fakturownia</td><td>—</td><td><code>RefreshInvoicesByPeriodAndStatusQuery</code>, <code>GetAllFakturowniaClientsQuery</code></td><td>Faktury wg okresu/statusu; klienci</td></tr>
           <tr><td>wFirma</td><td><code>POST api/2.0/wfirma/invoices/export-to-sheets</code></td><td><code>GetInvoicesByClientIdAndAddToSheet</code></td><td>Faktury; też kontrahenci i faktury opłacone</td></tr>
-          <tr><td>SaldeoSmart</td><td>query handler</td><td><code>GetInvoicesByMonthsQuery</code></td><td>Faktury wg miesiąca; kontrahenci; korekty</td></tr>
-          <tr><td>Systim</td><td>query handler</td><td><code>GetSystimCompaniesQuery</code></td><td>Firmy (sprzedawcy)</td></tr>
-          <tr><td>Zoho</td><td>command</td><td><code>ImportZohoInvoicesToSheetCommand</code></td><td>Wiersze kolejki + arkusz historii (audyt)</td></tr>
-          <tr><td>BrainEmbassy</td><td>command</td><td><code>SyncBrainEmbassyInvoicesToSheetCommand</code></td><td>Faktury</td></tr>
+          <tr><td>SaldeoSmart</td><td>—</td><td><code>GetInvoicesByMonthsQuery</code></td><td>Faktury wg miesiąca; kontrahenci; korekty</td></tr>
+          <tr><td>BrainEmbassy</td><td>—</td><td><code>SyncBrainEmbassyInvoicesToSheetCommand</code></td><td>Faktury (klient custom)</td></tr>
         </tbody>
       </table>
       <p style="color:var(--text-dim);font-size:14px;">Uwaga: nazewnictwo tras bywa różne (<code>sheets-export</code> vs <code>export-to-sheets</code>);
-      wersje v1 są oznaczone <code>[Obsolete]</code>, żywe są endpointy v2 (zwykle pod <code>api/2.0/...</code>, autoryzowane kluczem API).</p>
+      starsze warianty bywają oznaczone <code>[Obsolete]</code>, w użyciu są nowsze (część pod <code>api/2.0/...</code>).</p>
 
       <h3>2b. Faza B — Transformacja w arkuszu (poza kodem)</h3>
       <div class="callout todo">
@@ -293,7 +292,7 @@ sequenceDiagram
         <p>Ta warstwa <strong>nie istnieje w repozytorium</strong> — żyje w samych arkuszach: łączenie danych
         z dodatkowych źródeł, wyciąganie informacji i formuły liczące wartości dodatkowych pól (które po imporcie
         lądują w <code>CustomFields</code>). To jest najważniejsza część do odtworzenia przy migracji.</p>
-        <p>Filip przygotuje konkretne przykłady: jakie źródła i w jaki sposób są mergowane, jakie informacje
+        <p>Filip przygotuje konkretne przykłady: jakie źródła i w jaki sposób są łączone, jakie informacje
         wyciągane i jakie logiki dodawane. Poniżej szablon do wypełnienia.</p>
       </div>
       <table>
@@ -306,32 +305,32 @@ sequenceDiagram
             <td><em>np. VLOOKUP e-maila + formuła liczy odsetki</em></td>
             <td><em>tak / nie</em></td>
           </tr>
-          <!-- DO UZUPEŁNIENIA przez Filipa: kolejne wiersze z realnymi przypadkami (źródło, klucz merge'a, wyciągane informacje, dodawane logiki/formuły). -->
+          <!-- DO UZUPEŁNIENIA przez Filipa: kolejne wiersze z realnymi przypadkami (źródło, klucz łączenia, wyciągane informacje, dodawane logiki/formuły). -->
         </tbody>
       </table>
 
-      <h3>2c. Faza C — Import (arkusz → flow → DB)</h3>
-      <p>Azure Function z <code>[TimerTrigger("* * * * *")]</code> tika <strong>co minutę</strong>, ale to tylko puls
-      schedulera (z distributed lock): sprawdza jedynie, które procesy są „due" wg ich harmonogramu
+      <h3>2c. Faza C — Import (arkusz → proces → baza)</h3>
+      <p>Azure Function z <code>[TimerTrigger("* * * * *")]</code> budzi się <strong>co minutę</strong>, ale to tylko puls
+      harmonogramu (z distributed lock): sprawdza jedynie, które procesy mają zaplanowane uruchomienie na teraz, wg ich harmonogramu
       (<code>NextRunUtc</code>, <code>ScheduledSendHour</code>, <code>DaysInterval</code>).
       <strong>Pojedynczy proces odświeża arkusz i wysyła najwyżej raz dziennie</strong> — o ustawionej godzinie, nie co minutę.
-      Dopiero dla procesu „due" updater pobiera arkusz przez <code>GoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code>
-      (autoryzowane Sheets API → konwersja na CSV), parsuje, mapuje i importuje do bazy.</p>
+      Dopiero dla procesu zaplanowanego na teraz pobierany jest arkusz przez <code>GoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code>
+      (autoryzowane Sheets API → konwersja na CSV), po czym następuje parsowanie, mapowanie i import do bazy.</p>
       <ul>
         <li><strong>Recurring:</strong> <code>AutomatedRecurringCollectionRecurringCollectionFlowUpdater</code> →
         <code>ParseWithCustomFieldsAsync&lt;RecurringInvoiceCsvModel&gt;</code> → wiersze bez <code>DueDate</code> są
         pomijane → import. Błąd konwersji CSV → alert mailowy (<code>IAlertEmailService</code>), nie twardy crash.</li>
         <li><strong>Invoicing</strong> <em>(moduł dziś nieużywany — patrz „Zakres na dziś")</em>: <code>AutomatedInvoicingFlowUpdater</code> (działa tylko gdy
         <code>IntegrationType == GoogleSheets</code>) → <code>ParseToAsync&lt;InvoiceSheetRow&gt;</code> →
-        grupowanie po <code>InvoiceGroupId</code> → import draftów faktur.</li>
+        grupowanie po <code>InvoiceGroupId</code> → import wersji roboczych faktur.</li>
       </ul>
 
-      <h3>2d. Faza D — Downstream</h3>
+      <h3>2d. Faza D — Dalej</h3>
       <ul>
         <li><strong>Recurring / Collection:</strong> zaimportowane dane napędzają automatyzację windykacji —
         komunikaty trafiają na Azure Service Bus (<code>email-queue</code> / <code>sms-queue</code>), skąd konsumenci
         (Azure Functions) wysyłają e-maile/SMS.</li>
-        <li><strong>Invoicing:</strong> drafty → orchestracja Durable Functions → generowanie faktur w systemie
+        <li><strong>Invoicing</strong> <em>(dziś nieużywany)</em>: wersje robocze → orkiestracja Durable Functions → generowanie faktur w systemie
         docelowym (Xero / Fakturownia / inFakt).</li>
       </ul>
     </section>
@@ -343,7 +342,7 @@ sequenceDiagram
       <p><code>Application/Helpers/CsvParserService.cs</code> → <code>ParseWithCustomFieldsAsync&lt;T&gt;</code>: dla
       każdego wiersza CsvHelper mapuje znane kolumny na właściwości modelu, a następnie <code>ExtractCustomFields</code>
       przechodzi po wszystkich nagłówkach CSV. Każdy nagłówek, który <strong>nie pasuje</strong> do żadnej publicznej
-      właściwości modelu (porównanie <strong>po nazwie, case-insensitive</strong>, przez refleksję
+      właściwości modelu (porównanie <strong>po nazwie, bez rozróżniania wielkości liter</strong>, przez refleksję
       <code>GetProperty(header, IgnoreCase|Public|Instance)</code>), trafia do słownika
       <code>Dictionary&lt;string,string&gt; CustomFields</code>.</p>
       <pre class="code"><code>private static bool IsModelProperty&lt;T&gt;(string header) =&gt;
@@ -378,15 +377,15 @@ flowchart LR
       </div>
       <p>Odczyt arkusza ma dwie drogi w <code>GoogleDriveService</code>: publiczną (anonimowy
       <code>export?format=csv</code>) i prywatną (autoryzowane <code>Spreadsheets.Values.Get</code> + konwersja na CSV
-      przez CsvHelper). <strong>Żywe flow używają drogi prywatnej</strong>
-      (<code>DownloadDataFromPrivateGoogleSheetsAsync</code>).</p>
+      przez CsvHelper). <strong>Automatyzacja działających procesów (Collection / Recurring) używa drogi prywatnej</strong>
+      (<code>DownloadDataFromPrivateGoogleSheetsAsync</code>) — nie publicznego eksportu CSV.</p>
     </section>
 
     <section id="contracts">
       <h2>5. Kontrakty danych (kształt arkuszy)</h2>
       <p>Modele, do których parsowany jest CSV pobrany z arkusza. To kontrakt, który arkusz musi spełnić.</p>
 
-      <h3><code>RecurringInvoiceCsvModel</code> — recurring collection</h3>
+      <h3><code>RecurringInvoiceCsvModel</code> — Collection / Recurring</h3>
       <p style="color:var(--text-dim);font-size:14px;"><code>Sunbay.RecurringCollectionFlow.Automation/Models/RecurringInvoiceCsvModel.cs</code></p>
       <table>
         <thead><tr><th>Kolumna</th><th>Typ</th><th>Wymagane</th><th>Uwagi</th></tr></thead>
@@ -410,7 +409,7 @@ flowchart LR
         </tbody>
       </table>
 
-      <h3><code>InvoiceSheetRow</code> — invoicing flow</h3>
+      <h3><code>InvoiceSheetRow</code> — Invoicing Flow (dziś nieużywany)</h3>
       <p style="color:var(--text-dim);font-size:14px;"><code>Sunbay.InvoicingFlow/Sheets/InvoiceSheetRow.cs</code> —
       wiersze grupowane po <code>InvoiceGroupId</code> (1 grupa = 1 faktura z wieloma pozycjami).</p>
       <table>
@@ -436,15 +435,15 @@ flowchart LR
       <table>
         <thead><tr><th>Rola</th><th>Plik</th><th>Opis</th></tr></thead>
         <tbody>
-          <tr><td>Odczyt arkusza (seam migracji)</td><td><code>Application/Services/GoogleDrive/GoogleDriveService.cs</code></td><td><code>DownloadDataFromPrivateGoogleSheetsAsync</code> — czyta arkusz przez Sheets API, zwraca CSV</td></tr>
+          <tr><td>Odczyt arkusza (szew migracji)</td><td><code>Application/Services/GoogleDrive/GoogleDriveService.cs</code></td><td><code>DownloadDataFromPrivateGoogleSheetsAsync</code> — czyta arkusz przez Sheets API, zwraca CSV</td></tr>
           <tr><td>Zapis do arkusza (zasilanie)</td><td><code>Application/Services/GoogleDrive/GoogleDriveService.cs</code></td><td><code>OverrideRecordsInSheetByUrlAsync</code> / <code>AppendRecordsToSheetByUrlAsync</code></td></tr>
           <tr><td>Auth Google</td><td><code>Application/Services/GoogleDrive/GoogleClientFactory.cs</code></td><td>Service account + impersonacja per klient</td></tr>
           <tr><td>Parser + CustomFields</td><td><code>Application/Helpers/CsvParserService.cs</code></td><td>Mapowanie CSV; przechwytywanie kolumn spoza modelu</td></tr>
-          <tr><td>Przykład handlera zasilającego</td><td><code>Application/Features/Invoicing/Queries/Xero/GetAllUnpaidSalesInvoices/GetAllSalesInvoicesQueryHandler.cs</code></td><td>Wzorzec pull → map → write do arkusza</td></tr>
-          <tr><td>Model + updater recurring</td><td><code>Sunbay.RecurringCollectionFlow.Automation/</code></td><td><code>Models/RecurringInvoiceCsvModel.cs</code> + <code>Services/AutomatedRecurringCollectionRecurringCollectionFlowUpdater.cs</code></td></tr>
-          <tr><td>Model + updater invoicing</td><td><code>Sunbay.InvoicingFlow* </code></td><td><code>Sheets/InvoiceSheetRow.cs</code> + <code>Automation/Services/AutomatedInvoicingFlowUpdater.cs</code></td></tr>
-          <tr><td>Encje (konfiguracja flow)</td><td><code>Domain/Sunbay/RecurringCollectionFlow.cs</code>, <code>Domain/Sunbay/InvoicingFlow.cs</code></td><td>Pola <code>IntegrationType</code>, <code>IntegrationUrl</code></td></tr>
-          <tr><td>Triggery (harmonogram)</td><td><code>Sunbay.FunctionApp.Async/Functions/.../TimeTrigger/</code></td><td><code>ScheduleInvoicingFlowsTimeTrigger.cs</code>, <code>ScheduleRecurringCollectionFlowsTimeTrigger.cs</code> — <code>* * * * *</code> (tick co minutę = puls schedulera; pojedynczy proces max raz dziennie)</td></tr>
+          <tr><td>Przykład handlera zasilającego</td><td><code>Application/Features/Invoicing/Queries/Xero/GetAllUnpaidSalesInvoices/GetAllSalesInvoicesQueryHandler.cs</code></td><td>Wzorzec: pobierz → mapuj → zapisz do arkusza</td></tr>
+          <tr><td>Model + serwis automatyzacji (recurring)</td><td><code>Sunbay.RecurringCollectionFlow.Automation/</code></td><td><code>Models/RecurringInvoiceCsvModel.cs</code> + <code>Services/AutomatedRecurringCollectionRecurringCollectionFlowUpdater.cs</code></td></tr>
+          <tr><td>Model + serwis automatyzacji (invoicing)</td><td><code>Sunbay.InvoicingFlow* </code></td><td><code>Sheets/InvoiceSheetRow.cs</code> + <code>Automation/Services/AutomatedInvoicingFlowUpdater.cs</code></td></tr>
+          <tr><td>Encje (konfiguracja procesu)</td><td><code>Domain/Sunbay/RecurringCollectionFlow.cs</code>, <code>Domain/Sunbay/InvoicingFlow.cs</code></td><td>Pola <code>IntegrationType</code>, <code>IntegrationUrl</code></td></tr>
+          <tr><td>Triggery (harmonogram)</td><td><code>Sunbay.FunctionApp.Async/Functions/.../TimeTrigger/</code></td><td><code>ScheduleInvoicingFlowsTimeTrigger.cs</code>, <code>ScheduleRecurringCollectionFlowsTimeTrigger.cs</code> — <code>* * * * *</code> (budzi się co minutę = puls harmonogramu; pojedynczy proces max raz dziennie)</td></tr>
           <tr><td>Enum źródła</td><td><code>Domain/Sunbay/Enums/IntegrationType.cs</code></td><td><code>GoogleSheets = 1</code>, <code>CsvUpload = 2</code></td></tr>
         </tbody>
       </table>
@@ -452,7 +451,7 @@ flowchart LR
 
     <section id="migration">
       <h2>7. Granice migracji / co podmienić</h2>
-      <p><strong>Zależność procesów od arkuszy jest całkowita.</strong> Każdy żywy proces czyta dane z Google Sheets.
+      <p><strong>Zależność procesów od arkuszy jest całkowita.</strong> Każdy działający proces czyta dane z Google Sheets.
       W kodzie istnieje też <code>IntegrationType.CsvUpload</code>, ale służy on odrębnemu przypadkowi — importowi
       <strong>odbiorców (klientów naszych klientów)</strong> (frontend <code>src/components/clients/ImportClients/</code>
       + <code>src/components/csvImporterModal/</code>; backend <code>Sunbay.Invoices/Commands/ImportRecipients/</code>,
@@ -462,14 +461,14 @@ flowchart LR
       <ul>
         <li><strong>Odczyt:</strong> <code>IGoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code> — jeden punkt, w którym dane wchodzą do importu.</li>
         <li><strong>Zasilanie:</strong> handlery <code>*ForSheets</code> / <code>*AndAddToSheet</code> — dziś piszą do arkusza; docelowo źródło danych zamiast arkusza.</li>
-        <li><strong>Transformacja:</strong> warstwa formuł/joinów z fazy B — dziś w arkuszu, do przeniesienia do realnego ETL (to największa, „niewidoczna" praca).</li>
+        <li><strong>Transformacja:</strong> warstwa formuł i złączeń z fazy B — dziś w arkuszu, do przeniesienia do realnego ETL (to największa, „niewidoczna" praca).</li>
         <li><strong>Model:</strong> <code>IntegrationType</code> — dodanie nowego źródła lub zastąpienie wartości <code>GoogleSheets</code>.</li>
       </ul>
       <div class="callout">
         <span class="tag">Pytania otwarte do ustalenia</span>
         <ul>
-          <li>Wolumeny: ile wierszy/faktur na arkusz, ile arkuszy/flow/klientów aktywnych?</li>
-          <li>Częstotliwość: jak często flow są „due" i jak często Apps Script odświeża zasilanie?</li>
+          <li>Wolumeny: ile wierszy/faktur na arkusz, ile arkuszy/procesów/klientów aktywnych?</li>
+          <li>Częstotliwość: jak często procesy się uruchamiają i jak często Apps Script odświeża zasilanie?</li>
           <li>Które integracje księgowe są realnie używane dziś (a które tylko w kodzie)?</li>
           <li>Jak wiele logiki z fazy B jest unikalne per klient vs. powtarzalne?</li>
         </ul>
@@ -479,7 +478,7 @@ flowchart LR
     <section id="legacy">
       <h2>8. Legacy</h2>
       <p>Dla porządku: w kodzie istnieją też stare endpointy panelu komunikacji/dokumentów
-      (<code>api/2.0/sheets/*</code>, <code>[Obsolete]</code> <code>api/sheets/*</code>) oraz zapis statusów/timestampów
+      (<code>api/2.0/sheets/*</code>, <code>[Obsolete]</code> <code>api/sheets/*</code>) oraz zapis statusów i znaczników czasu
       z powrotem do arkusza — są <strong>poza zakresem</strong> tej migracji i można je pominąć.</p>
     </section>
 

@@ -142,7 +142,7 @@
         <ul>
           <li><span class="phase">A · Zasilanie</span> — Sunbay <em>sam</em> ciągnie faktury/kontakty z softów księgowych (Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho) i <strong>zapisuje je do arkusza</strong>. Wyzwala to Apps Script w arkuszu wołając endpointy <code>*/sheets-export</code>.</li>
           <li><span class="phase">B · Transformacja</span> — <strong>w samym arkuszu</strong> (poza kodem): formuły, joiny z innymi źródłami (np. adresy e-mail), wyliczane pola pochodne.</li>
-          <li><span class="phase">C · Import</span> — timer (co minutę) czyta arkusz przez Sheets API i importuje wiersze do bazy.</li>
+          <li><span class="phase">C · Import</span> — timer tika co minutę <strong>tylko po to, by sprawdzić</strong>, czy któryś proces jest zaplanowany na ten moment; <strong>każdy proces odświeża arkusz i wysyła najwyżej raz dziennie</strong> (o swojej godzinie). Gdy proces jest „due": odczyt arkusza (Sheets API) → import wierszy do bazy.</li>
           <li><span class="phase">D · Downstream</span> — dalej: windykacja (e-mail/SMS) albo generowanie faktur w systemie docelowym.</li>
         </ul>
         <p><strong>Most na dowolne pola policzone w arkuszu:</strong> kolumny spoza modelu C# trafiają automatycznie do <code>CustomFields</code> i przepływają do importu bez zmian w kodzie.</p>
@@ -209,11 +209,11 @@ flowchart TB
   end
   subgraph C["C - IMPORT (arkusz do flow do DB)"]
     direction TB
-    C1["Timer co minute: flow 'due' wg NextRunUtc"]
+    C1["Timer tika co minute: czy ktorys proces jest due? (proces max raz dziennie)"]
     C2["DownloadDataFromPrivateGoogleSheetsAsync (Sheets API do CSV)"]
     C3["ParseWithCustomFieldsAsync: kolumny spoza modelu do CustomFields"]
     C4["map i import do bazy"]
-    C1 --> C2 --> C3 --> C4
+    C1 -->|"gdy proces due"| C2 --> C3 --> C4
   end
   subgraph D["D - DOWNSTREAM"]
     direction TB
@@ -245,7 +245,8 @@ sequenceDiagram
   ACC-->>API: faktury
   API->>GS: zapis wierszy (OverrideRecords...)
   Note over GS: czlowiek wzbogaca: formuly, joiny, pola -> CustomFields
-  TMR->>API: tick co minute (flow due?)
+  TMR->>API: tick co minute - ktorys proces due dzis?
+  Note over TMR,API: kazdy proces max raz dziennie (o swojej godzinie)
   API->>GS: odczyt CSV (Sheets API)
   GS-->>API: wiersze CSV
   API->>DB: parse + import (z CustomFields)
@@ -297,9 +298,11 @@ sequenceDiagram
       </table>
 
       <h3>2c. Faza C — Import (arkusz → flow → DB)</h3>
-      <p>Azure Function z <code>[TimerTrigger("* * * * *")]</code> (co minutę, z distributed lock) sprawdza, które flow
-      są „due" wg harmonogramu (<code>NextRunUtc</code>, <code>ScheduledSendHour</code>, <code>DaysInterval</code>).
-      Dla każdego flow updater pobiera arkusz przez <code>GoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code>
+      <p>Azure Function z <code>[TimerTrigger("* * * * *")]</code> tika <strong>co minutę</strong>, ale to tylko puls
+      schedulera (z distributed lock): sprawdza jedynie, które procesy są „due" wg ich harmonogramu
+      (<code>NextRunUtc</code>, <code>ScheduledSendHour</code>, <code>DaysInterval</code>).
+      <strong>Pojedynczy proces odświeża arkusz i wysyła najwyżej raz dziennie</strong> — o ustawionej godzinie, nie co minutę.
+      Dopiero dla procesu „due" updater pobiera arkusz przez <code>GoogleDriveService.DownloadDataFromPrivateGoogleSheetsAsync</code>
       (autoryzowane Sheets API → konwersja na CSV), parsuje, mapuje i importuje do bazy.</p>
       <ul>
         <li><strong>Recurring:</strong> <code>AutomatedRecurringCollectionRecurringCollectionFlowUpdater</code> →
@@ -428,7 +431,7 @@ flowchart LR
           <tr><td>Model + updater recurring</td><td><code>Sunbay.RecurringCollectionFlow.Automation/</code></td><td><code>Models/RecurringInvoiceCsvModel.cs</code> + <code>Services/AutomatedRecurringCollectionRecurringCollectionFlowUpdater.cs</code></td></tr>
           <tr><td>Model + updater invoicing</td><td><code>Sunbay.InvoicingFlow* </code></td><td><code>Sheets/InvoiceSheetRow.cs</code> + <code>Automation/Services/AutomatedInvoicingFlowUpdater.cs</code></td></tr>
           <tr><td>Encje (konfiguracja flow)</td><td><code>Domain/Sunbay/RecurringCollectionFlow.cs</code>, <code>Domain/Sunbay/InvoicingFlow.cs</code></td><td>Pola <code>IntegrationType</code>, <code>IntegrationUrl</code></td></tr>
-          <tr><td>Triggery (harmonogram)</td><td><code>Sunbay.FunctionApp.Async/Functions/.../TimeTrigger/</code></td><td><code>ScheduleInvoicingFlowsTimeTrigger.cs</code>, <code>ScheduleRecurringCollectionFlowsTimeTrigger.cs</code> — <code>* * * * *</code></td></tr>
+          <tr><td>Triggery (harmonogram)</td><td><code>Sunbay.FunctionApp.Async/Functions/.../TimeTrigger/</code></td><td><code>ScheduleInvoicingFlowsTimeTrigger.cs</code>, <code>ScheduleRecurringCollectionFlowsTimeTrigger.cs</code> — <code>* * * * *</code> (tick co minutę = puls schedulera; pojedynczy proces max raz dziennie)</td></tr>
           <tr><td>Enum źródła</td><td><code>Domain/Sunbay/Enums/IntegrationType.cs</code></td><td><code>GoogleSheets = 1</code>, <code>CsvUpload = 2</code></td></tr>
         </tbody>
       </table>

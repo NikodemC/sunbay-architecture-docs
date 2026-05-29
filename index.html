@@ -136,8 +136,9 @@
       <div class="callout key">
         <span class="tag">TL;DR</span>
         <p><strong>Arkusz Google to nie „głupie wejście" — to warstwa ETL/wzbogacania w środku przepływu.</strong>
-        Każdy proces (<code>InvoicingFlow</code>, <code>RecurringCollectionFlow</code>, <code>CollectionFlow</code>)
-        jest zasilany <strong>wyłącznie z Google Sheets — bez wyjątku</strong>.</p>
+        Aktywne dziś procesy windykacyjne (<code>CollectionFlow</code>, <code>RecurringCollectionFlow</code>)
+        są zasilane <strong>wyłącznie z Google Sheets — bez wyjątku</strong>. <code>InvoicingFlow</code> używa tego samego
+        wzorca, ale jest obecnie nieużywany (patrz „Zakres na dziś").</p>
         <p>Pełny cykl życia arkusza:</p>
         <ul>
           <li><span class="phase">A · Zasilanie</span> — Sunbay <em>sam</em> ciągnie faktury/kontakty z softów księgowych (Xero, Fakturownia, inFakt, SaldeoSmart, wFirma, Systim, Zoho) i <strong>zapisuje je do arkusza</strong>. Wyzwala to Apps Script w arkuszu wołając endpointy <code>*/sheets-export</code>.</li>
@@ -148,6 +149,17 @@
         <p><strong>Most na dowolne pola policzone w arkuszu:</strong> kolumny spoza modelu C# trafiają automatycznie do <code>CustomFields</code> i przepływają do importu bez zmian w kodzie.</p>
         <p><strong>Co realnie trzeba odtworzyć przy migracji:</strong> nie pojedynczy „import", lecz cały łańcuch <em>pull → enrich → compute</em>, który dziś jest rozmazany między kodem API a formułami żyjącymi w arkuszach.</p>
       </div>
+      <div class="callout warn">
+        <span class="tag">Zakres na dziś</span>
+        <p><strong>Aktywne procesy:</strong> <strong>Collection Flow</strong> i <strong>Recurring Collection Flow</strong> —
+        zasilane z arkuszy, napędzają windykację (e-mail/SMS). Na nich skupiamy się teraz.</p>
+        <p><strong>Invoicing Flow:</strong> zbudowany tym samym wzorcem (arkusz → import), ale <strong>obecnie nieużywany</strong>
+        i pozostanie taki jeszcze przez jakiś czas. Opisany niżej dla kompletności — ale nie jest dziś w użyciu.</p>
+        <p><strong>OCR (Gemini / Vertex AI):</strong> osobny pipeline; jego wyniki <em>docelowo</em> zasilają arkusze pod
+        Invoicing Flow — czyli dziś również poza realnym użyciem.</p>
+        <p><strong>Kierunek V2:</strong> dane z arkuszy mają zasilać AI-analitykę; prawdopodobnie pojawi się wtedy warstwa
+        pośrednia (semantic layer / DuckDB lub podobne) — to naturalny punkt zaczepienia dla migracji.</p>
+      </div>
     </section>
 
     <section id="arch">
@@ -156,9 +168,9 @@
       MediatR CQRS) na bazie MSSQL, z Azure Functions (timery, konsumenci Service Bus, Durable) i Azure Service Bus
       jako asynchronicznym kręgosłupem. Integruje się z zewnętrznymi softami księgowymi. <strong>Google Sheets jest
       centralnym hubem danych</strong> między softami księgowymi a procesami Sunbay.</p>
-      <p style="color:var(--text-dim);font-size:14px;">OCR (Gemini / Vertex AI) to <strong>osobny</strong> pipeline ekstrakcji
-      dokumentów (upload pliku → ekstrakcja → callback) — nie dotyka ścieżki Google Sheets, dlatego nie ma go na
-      powyższym diagramie ani w dalszej części dokumentu.</p>
+      <p style="color:var(--text-dim);font-size:14px;">OCR (Gemini / Vertex AI) celowo nie jest na diagramie — to osobny
+      pipeline ekstrakcji dokumentów, którego wyniki <em>docelowo</em> zasilają arkusze pod Invoicing Flow (dziś nieużywany).
+      Szczegóły w sekcji „Zakres na dziś" na górze.</p>
       <div class="diagram">
         <div class="cap">Kontekst systemu — przepływ danych (strzałka ciągła = ruch danych, przerywana = wyzwolenie/trigger)</div>
         <pre class="mermaid">
@@ -218,8 +230,8 @@ flowchart TB
   end
   subgraph D["D - DOWNSTREAM"]
     direction TB
-    D1["Recurring: Service Bus do e-mail/SMS"]
-    D2["Invoicing: drafty do Durable do system docelowy"]
+    D1["Collection/Recurring: Service Bus do e-mail/SMS"]
+    D2["Invoicing (dzis nieuzywany): drafty do Durable do system docelowy"]
   end
   A3 --> B1
   B1 --> C1
@@ -309,7 +321,7 @@ sequenceDiagram
         <li><strong>Recurring:</strong> <code>AutomatedRecurringCollectionRecurringCollectionFlowUpdater</code> →
         <code>ParseWithCustomFieldsAsync&lt;RecurringInvoiceCsvModel&gt;</code> → wiersze bez <code>DueDate</code> są
         pomijane → import. Błąd konwersji CSV → alert mailowy (<code>IAlertEmailService</code>), nie twardy crash.</li>
-        <li><strong>Invoicing:</strong> <code>AutomatedInvoicingFlowUpdater</code> (działa tylko gdy
+        <li><strong>Invoicing</strong> <em>(moduł dziś nieużywany — patrz „Zakres na dziś")</em>: <code>AutomatedInvoicingFlowUpdater</code> (działa tylko gdy
         <code>IntegrationType == GoogleSheets</code>) → <code>ParseToAsync&lt;InvoiceSheetRow&gt;</code> →
         grupowanie po <code>InvoiceGroupId</code> → import draftów faktur.</li>
       </ul>
